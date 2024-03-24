@@ -1,7 +1,7 @@
 let schduledWork = null; //被调度的任务
 let isRunning = false; //是否正在执行
 
-let yieldInterval = 5000;
+let yieldInterval = 5;
 let deadline = 0;
 
 const { port1, port2 } = new MessageChannel();
@@ -15,7 +15,7 @@ function performWorkUntilDeadline() {
       debugger
       if (hasMore) {
         console.log("未执行完，接着执行")
-        // port2.postMessage(null);
+        // port2.postMessage(null); //还没有实现渲染可中断恢复，可以解开，直接卡死
       } else {
         isRunning = false;
       }

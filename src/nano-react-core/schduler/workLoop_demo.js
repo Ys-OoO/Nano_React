@@ -8,6 +8,7 @@ function fiberConstructWork() {
   }
 }
 
+//模拟work调度，10个work
 function workLoop() {
   let taskCount = 10;
   while (taskCount) {
