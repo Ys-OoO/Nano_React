@@ -1,30 +1,14 @@
 import { requestWork, shouldYieldWork } from './SchdulerWork.js';
 
 
-//模拟Fiber构造工作
-function fiberConstructWork() {
-  for (let i = 0; i < 1000; i++) {
-    console.log("构造Fiber——" + i);
-  }
-}
+let taskId = 1;// 类比为Fiber构造的任务
 
-//模拟work调度，10个work
+//模拟工作循环
 function workLoop() {
-  let taskCount = 10;
-  while (taskCount) {
-    if (shouldYieldWork()) { break }
-    //执行一个任务
-    taskCount--;
-    fiberConstructWork();
+  while (!shouldYieldWork()) {
+    console.log(`正在执行任务${taskId}`);
   }
-
-  //返回执行状态
-  if (taskCount) {
-    return true;
-  } else {
-    return false;
-  }
+  taskId++;
+  return Math.random() < 0.5
 }
-
 requestWork(workLoop);
-
