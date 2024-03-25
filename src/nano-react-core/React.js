@@ -61,20 +61,23 @@ export let workInProgress = null;
 
 /**
  * 构造Fiber树，这里实际上就是将React.js 中的 render 函数的 VDom -> Dom 拦截，并实现VDom -> Fiber Tree -> Dom
+ * 将Dom 的构造 和 Fiber的构造一起完成。
  * @param {Object} vDom 
  */
 export function performWorkOfUnit(fiberNode) {
   //生成真实Dom
   if (fiberNode.dom === null) {
     let dom = fiberNode.type === TEXT_ElEMENT_TYPE ? document.createTextNode(fiberNode.props.nodeValue) : document.createElement(fiberNode.type);
-    //挂载
-    fiberNode.parent.dom.append(dom);
+    //挂载 这里不再每次处理一个Fiber就挂载一次，当Fiber生成完成后 一次性完成挂载
+    // fiberNode.parent.dom.append(dom);
+
     //设置FiberNode 的 dom 属性
     fiberNode.dom = dom;
+
     //赋值props
     Object.keys(fiberNode.props).forEach((key) => {
       if (key !== 'children') {
-        dom[key] = fiberNode[props][key];
+        dom[key] = fiberNode.props[key];
       }
     })
   }
@@ -113,7 +116,7 @@ export function performWorkOfUnit(fiberNode) {
   return workInProgress;
 }
 
-
+export let rootFiber = null;
 /**
  * 递归，每一次就是将当前的虚拟DOM转换成真实DOM
  * @param {Object} vDom 虚拟DOM,也就是通过ReactElement.js中提供的方法所创建的结构
@@ -126,7 +129,7 @@ function render(vDom, domContainer) {
       children: [vDom]
     }
   }
-
+  rootFiber = workInProgress;
   requestWork(workLoop);
 
   //以下代码是没有使用Schduler之前的逻辑
