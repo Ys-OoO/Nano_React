@@ -18,7 +18,11 @@ export function workLoop() {
     }
 
   }
-  return workInProgress !== null;
+  if (workInProgress) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 
@@ -29,7 +33,14 @@ function commitRoot() {
 
 function commitWork(fiberNode) {
   if (!fiberNode) return;
-  fiberNode.parent.dom.append(fiberNode.dom);
+
+  //兼容函数式组件，因为函数组件本身不对应Dom,因此内部的元素应该要向上查找
+  let fiberParent = fiberNode.parent;
+  while (!fiberParent.dom) {
+    fiberParent = fiberParent.parent;
+  }
+  //挂载 如果 fiberNode 是函数组件，fiberNode.dom是null，因此不用添加
+  fiberNode.dom && fiberParent.dom.append(fiberNode.dom);
   commitWork(fiberNode.child);
   commitWork(fiberNode.sibling);
 }

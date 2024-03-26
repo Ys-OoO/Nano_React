@@ -1,7 +1,7 @@
 let schduledWork = null; //被调度的任务
 let isRunning = false; //是否正在执行
 
-let yieldInterval = 5;
+let yieldInterval = 5000000000000000;
 let deadline = 0;
 
 const { port1, port2 } = new MessageChannel();
