@@ -12,7 +12,6 @@ function performWorkUntilDeadline() {
     deadline = curTime + yieldInterval; //deadline是为了判断是否还有剩余时间，具体判断再shouldYieldWork中
     try {
       const hasMore = schduledWork(); //尝试去执行
-      // debugger
       if (hasMore) {
         console.log("工作的多个任务未执行完，接着执行")
         port2.postMessage(null);

@@ -1,4 +1,4 @@
-import { performWorkOfUnit, rootFiber, workInProgress } from '../React.js';
+import { nextRootFiber, performWorkOfUnit, updateProps, workInProgress } from '../React.js';
 import { shouldYieldWork } from './SchdulerWork.js';
 
 
@@ -27,7 +27,7 @@ export function workLoop() {
 
 
 function commitRoot() {
-  commitWork(rootFiber.child);
+  commitWork(nextRootFiber.child);
 }
 
 
@@ -39,8 +39,15 @@ function commitWork(fiberNode) {
   while (!fiberParent.dom) {
     fiberParent = fiberParent.parent;
   }
-  //挂载 如果 fiberNode 是函数组件，fiberNode.dom是null，因此不用添加
-  fiberNode.dom && fiberParent.dom.append(fiberNode.dom);
+  //处理更新逻辑
+  if (fiberNode.effectTag === 'update') {
+    updateProps(fiberNode.dom, fiberNode.props, fiberNode.alternate?.props);
+  } else if (fiberNode.effectTag === 'palacement') {
+    //挂载 如果 fiberNode 是函数组件，fiberNode.dom是null，因此不用添加
+    fiberNode.dom && fiberParent.dom.append(fiberNode.dom);
+  }
+
+  //递归执行初始化/更新
   commitWork(fiberNode.child);
   commitWork(fiberNode.sibling);
 }

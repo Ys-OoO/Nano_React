@@ -3,8 +3,8 @@ import { requestWork } from "./schduler/SchdulerWork";
 
 export const TEXT_ElEMENT_TYPE = 'TEXT_ElEMENT';
 export let workInProgress = null;
-export let rootFiber = null;
-
+export let currentRootFiber = null; //当前的根Fiber节点，创建时是新的，更新时是老的
+export let nextRootFiber = null;
 
 /**
  * 视为VDOM Tree的根节点
@@ -59,16 +59,38 @@ function createElement(type, props, ...children) {
     ********    ********
  */
 function initChildren(fiberNode, children) {
+  let oldFiberChild = fiberNode.alternate?.child; //每个Fiber节点通过alternate指向他对应的老Fiber节点,这个变量初始化是老Fiber的第一个孩子
   let prevFiberNode = null;
   let parentFiberNode = fiberNode;
   children.forEach((child, index) => {
-    const curFiberNode = {
-      type: child.type,
-      props: child.props,
-      child: null,
-      parent: parentFiberNode, //父节点
-      sibling: null,
-      dom: null
+    let curFiberNode;
+    debugger
+    //判断是否需要更新
+    if (isNeedUpdate(oldFiberChild, child)) {
+      curFiberNode = {
+        type: child.type,
+        props: child.props,
+        child: null,
+        parent: parentFiberNode, //父节点
+        sibling: null,
+        dom: oldFiberChild.dom,
+        effectTag: "update",
+        alternate: oldFiberChild,
+      }
+    } else {
+      curFiberNode = {
+        type: child.type,
+        props: child.props,
+        child: null,
+        parent: parentFiberNode, //父节点
+        sibling: null,
+        dom: null,
+        effectTag: "palacement"
+      }
+    }
+
+    if (oldFiberChild) { //由于这里处于children的遍历内，因此老的Fiber只需要找兄弟节点即可，他会在找到空兄弟时与children循环一同结束
+      oldFiberChild = oldFiberChild.sibling;
     }
 
     if (index === 0) { //第一个孩子
@@ -99,6 +121,17 @@ function initChildren(fiberNode, children) {
   }
 }
 
+//是否需要更新
+function isNeedUpdate(oldFiber, curFiber) {
+  //判断节点类型
+  let isSame;
+  //如果是相同类型且触发更新，则需要更新，不同类型的是创建流程
+  isSame = oldFiber && oldFiber.type === curFiber.type;
+
+  return isSame;
+}
+
+
 //更新和初始化函数组件
 function updateFunctionComponent(fiberNode) {
   //调用函数组件，传递props
@@ -117,19 +150,45 @@ function updateHostComponent(fiberNode) {
 
     //设置FiberNode 的 dom 属性
     fiberNode.dom = dom;
-
-    //赋值props
-    Object.keys(fiberNode.props).forEach((key) => {
-      if (key !== 'children') {
-        dom[key] = fiberNode.props[key];
-      }
-    })
+    updateProps(dom, fiberNode.props, {});
   }
 
   const children = fiberNode.props.children;
   initChildren(fiberNode, children);
 }
 
+//创建或更新props 将新的props添加到对应DOM上
+export function updateProps(dom, nextProps, prevProps) {
+  //赋值props，处理事件
+  Object.keys(nextProps).forEach((key) => {
+    if (key !== 'children') {
+
+    }
+  })
+  // 情况分类：  
+  // 1. next 没有，pre有——>删 
+  Object.keys(prevProps).forEach(key => {
+    if (!(key in nextProps) && key !== 'children') {
+      dom.removeAttribute(key);
+    }
+  })
+  // 2. next有，prev没有——>增
+  // 3. next有，prev有——>判断更新
+  Object.keys(nextProps).forEach(key => {
+    if (key !== 'children') {
+      if (nextProps[key] !== prevProps[key]) {
+        if (key.startsWith("on", 0)) { //通过是否有on开头的props判断是否需要绑定事件
+          // todo 这种方式实际上和React中的合成事件不同, 后续深入了解尝试替换
+          const eventType = key.slice(2).toLowerCase();
+          dom.removeEventListener(eventType, prevProps[key]);
+          dom.addEventListener(eventType, nextProps[key]);
+        } else {
+          dom[key] = nextProps[key];
+        }
+      }
+    }
+  })
+}
 
 /**
  * 构造Fiber树，这里实际上就是将React.js 中的 render 函数的 VDom -> Dom 拦截，并实现VDom -> Fiber Tree -> Dom
@@ -156,13 +215,13 @@ export function performWorkOfUnit(fiberNode) {
  */
 function render(vDom, domContainer) {
   //初始化根Fiber节点
-  rootFiber = {
+  nextRootFiber = {
     dom: domContainer,
     props: {
       children: [vDom]
     }
   }
-  workInProgress = rootFiber;
+  workInProgress = nextRootFiber;
   requestWork(workLoop);
 
   //以下代码是没有使用Schduler之前的逻辑
@@ -186,8 +245,25 @@ function render(vDom, domContainer) {
   // domContainer.append(dom);
 }
 
+/**
+ * 
+ * @param {*} vDom 
+ * @param {*} domContainer 
+ */
+function update() {
+  currentRootFiber = nextRootFiber;
+  debugger
+  nextRootFiber = {
+    dom: currentRootFiber.dom,
+    props: currentRootFiber.props,
+    alternate: currentRootFiber
+  }
 
+  workInProgress = nextRootFiber;
+  requestWork(workLoop);
+}
 const React = {
+  update,
   createElement,
   createTextNode,
   render

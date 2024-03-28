@@ -7,7 +7,6 @@ function App() {
       <p>Hello 🫡</p>
       <p style="color:red">Nano React</p>
       <Counter baseCount={1} />
-      <Counter baseCount={2} />
     </div>
   );
 }
