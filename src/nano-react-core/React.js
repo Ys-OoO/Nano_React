@@ -64,7 +64,6 @@ function initChildren(fiberNode, children) {
   let parentFiberNode = fiberNode;
   children.forEach((child, index) => {
     let curFiberNode;
-    debugger
     //判断是否需要更新
     if (isNeedUpdate(oldFiberChild, child)) {
       curFiberNode = {
@@ -150,7 +149,7 @@ function updateHostComponent(fiberNode) {
 
     //设置FiberNode 的 dom 属性
     fiberNode.dom = dom;
-    updateProps(dom, fiberNode.props, {});
+    updateProps(dom, fiberNode.props, {}); //初始创建，没有老的props
   }
 
   const children = fiberNode.props.children;
@@ -182,7 +181,7 @@ export function updateProps(dom, nextProps, prevProps) {
           const eventType = key.slice(2).toLowerCase();
           dom.removeEventListener(eventType, prevProps[key]);
           dom.addEventListener(eventType, nextProps[key]);
-        } else {
+        } else if (dom) {
           dom[key] = nextProps[key];
         }
       }
@@ -252,7 +251,7 @@ function render(vDom, domContainer) {
  */
 function update() {
   currentRootFiber = nextRootFiber;
-  debugger
+
   nextRootFiber = {
     dom: currentRootFiber.dom,
     props: currentRootFiber.props,
