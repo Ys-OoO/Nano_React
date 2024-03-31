@@ -1,9 +1,9 @@
 import React from '../nano-react-core/React';
 
 let count = 1;
-export default function Counter({ baseCount }) {
+export default function Counter({ baseCount, name }) {
+  console.log(name);
   const handleClick = function () {
-    console.log('click');
     ++count;
     React.update();
   };

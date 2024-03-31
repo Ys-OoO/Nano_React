@@ -2,9 +2,11 @@ import { workLoop } from "./schduler/Schduler";
 import { requestWork } from "./schduler/SchdulerWork";
 
 export const TEXT_ElEMENT_TYPE = 'TEXT_ElEMENT';
-export let workInProgress = null;
+export let workInProgress = null; // 当前处理的节点
 export let currentRootFiber = null; //当前的根Fiber节点，创建时是新的，更新时是老的
-export let nextRootFiber = null;
+export let nextRootFiber = null; // 下一个要处理的根节点，更新时应该是对应触发更新的组件数，而不是整棵树
+export let shouldDeleteNodeList = []; //在更新时（调用React.update）需要删除的节点列表
+let functionComponentRoot = null; //构造时，利用闭包 保存每个函数组件的Fiber节点
 
 /**
  * 视为VDOM Tree的根节点
@@ -38,7 +40,7 @@ function createElement(type, props, ...children) {
       ...props,
       children: children.map(child => {
         //除了 string 之外都是是为了兼容组件中使用 {prop} 渲染变量，{prop} 被视为一个新的节点
-        if ((typeof child === 'string') || (typeof child === 'number') || (typeof child === 'boolean')) {
+        if ((typeof child === 'string') || (typeof child === 'number')) {
           return createTextNode(child);
         } else {
           return child;
@@ -58,10 +60,16 @@ function createElement(type, props, ...children) {
     *   A  *  → *   B  *
     ********    ********
  */
-function initChildren(fiberNode, children) {
+/**
+ * 调和子节点数组，初始化时为对每个Fiber节点进行构造，更新时是对每个Fiber节点添加一些新属性
+ * @param {Object} fiberNode Fiber 节点
+ * @param {Object} children Fiber 节点的子数组
+ */
+function reconcileChildren(fiberNode, children) {
   let oldFiberChild = fiberNode.alternate?.child; //每个Fiber节点通过alternate指向他对应的老Fiber节点,这个变量初始化是老Fiber的第一个孩子
   let prevFiberNode = null;
   let parentFiberNode = fiberNode;
+  let firstFlag = false; // 用于处理第一个孩子节点是false的情况，如果第一个孩子节点是false，那么他的兄弟节点应充当第一个孩子节点
   children.forEach((child, index) => {
     let curFiberNode;
     //判断是否需要更新
@@ -77,14 +85,20 @@ function initChildren(fiberNode, children) {
         alternate: oldFiberChild,
       }
     } else {
-      curFiberNode = {
-        type: child.type,
-        props: child.props,
-        child: null,
-        parent: parentFiberNode, //父节点
-        sibling: null,
-        dom: null,
-        effectTag: "palacement"
+      if (child) {
+        curFiberNode = {
+          type: child.type,
+          props: child.props,
+          child: null,
+          parent: parentFiberNode, //父节点
+          sibling: null,
+          dom: null,
+          effectTag: "palacement"
+        }
+      }
+      //是否需要删除
+      if (oldFiberChild) {
+        shouldDeleteNodeList.push(oldFiberChild);
       }
     }
 
@@ -93,12 +107,29 @@ function initChildren(fiberNode, children) {
     }
 
     if (index === 0) { //第一个孩子
-      parentFiberNode.child = curFiberNode;
+      if (!child) {
+        firstFlag = true
+      } else {
+        parentFiberNode.child = curFiberNode;
+      }
     } else { //第一个兄弟
-      prevFiberNode.sibling = curFiberNode;
+      if (firstFlag) {
+        parentFiberNode.child = curFiberNode
+        firstFlag = false;
+      } else {
+        prevFiberNode.sibling = curFiberNode;
+      }
     }
-    prevFiberNode = curFiberNode;
+    if (curFiberNode) {
+      prevFiberNode = curFiberNode;
+    }
   })
+
+  //删除多余老节点
+  while (oldFiberChild) {
+    shouldDeleteNodeList.push(oldFiberChild);
+    oldFiberChild = oldFiberChild.sibling;
+  }
 
   //寻找下一个节点，子节点/兄弟节点/叔叔节点
   if (parentFiberNode.child) {
@@ -120,7 +151,13 @@ function initChildren(fiberNode, children) {
   }
 }
 
-//是否需要更新
+/**
+ * 是否需要更新，目前的逻辑如下：
+ * 1. 两者类型相同则需要更新
+ * @param {Object} oldFiber 老的Fiber节点
+ * @param {Object} curFiber 新的Fiber节点
+ * @returns 
+ */
 function isNeedUpdate(oldFiber, curFiber) {
   //判断节点类型
   let isSame;
@@ -133,10 +170,11 @@ function isNeedUpdate(oldFiber, curFiber) {
 
 //更新和初始化函数组件
 function updateFunctionComponent(fiberNode) {
+  functionComponentRoot = fiberNode; //保存当前处理的节点
   //调用函数组件，传递props
   const children = [fiberNode.type(fiberNode.props)]
   //构造子Fiber
-  initChildren(fiberNode, children);
+  reconcileChildren(fiberNode, children);
 }
 
 //更新和初始化基本元素
@@ -153,11 +191,12 @@ function updateHostComponent(fiberNode) {
   }
 
   const children = fiberNode.props.children;
-  initChildren(fiberNode, children);
+  reconcileChildren(fiberNode, children);
 }
 
 //创建或更新props 将新的props添加到对应DOM上
 export function updateProps(dom, nextProps, prevProps) {
+  if (!dom) return
   //赋值props，处理事件
   Object.keys(nextProps).forEach((key) => {
     if (key !== 'children') {
@@ -190,15 +229,20 @@ export function updateProps(dom, nextProps, prevProps) {
 }
 
 /**
- * 构造Fiber树，这里实际上就是将React.js 中的 render 函数的 VDom -> Dom 拦截，并实现VDom -> Fiber Tree -> Dom
+ * 构造Fiber节点，由调度器Schduler和workInPorgress多次调用完成Fiber树的构建，
+ * 初始化时：这里实际上就是将React.js 中的 render 函数的 VDom -> Dom 拦截，并实现VDom -> Fiber Tree -> Dom
+ * 更新时：Old Fiber Tree ->New Fiber Tree
  * 将Dom 的构造 和 Fiber的构造一起完成。
  * @param {Object} vDom 
  */
 export function performWorkOfUnit(fiberNode) {
   const isFunctionComponent = typeof fiberNode.type === "function";
-
   //构造Fiber的结构
   if (isFunctionComponent) {
+    if (nextRootFiber?.sibling?.type === fiberNode?.type) {
+      workInProgress = null;
+      return workInProgress;
+    }
     updateFunctionComponent(fiberNode);
   } else {
     updateHostComponent(fiberNode)
@@ -245,22 +289,28 @@ function render(vDom, domContainer) {
 }
 
 /**
- * 
+ * 更新时触发的逻辑
  * @param {*} vDom 
  * @param {*} domContainer 
  */
 function update() {
-  currentRootFiber = nextRootFiber;
+  let innerFuncFiber = functionComponentRoot;
+  return () => {
+    currentRootFiber = nextRootFiber;
+    nextRootFiber = {
+      ...innerFuncFiber,
+      alternate: innerFuncFiber
+    }
 
-  nextRootFiber = {
-    dom: currentRootFiber.dom,
-    props: currentRootFiber.props,
-    alternate: currentRootFiber
+    workInProgress = nextRootFiber;
+    requestWork(workLoop);
   }
-
-  workInProgress = nextRootFiber;
-  requestWork(workLoop);
 }
+
+export function emptifyDeleteList() {
+  shouldDeleteNodeList = [];
+}
+
 const React = {
   update,
   createElement,

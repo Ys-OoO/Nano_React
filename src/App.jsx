@@ -1,18 +1,41 @@
-import Counter from './components/Counter.jsx';
 import React from './nano-react-core/React.js';
 
-let baseCount = 10;
-function App() {
-  const handleClick = function () {
-    ++baseCount;
-    React.update();
+let countFoo = 1;
+function Foo() {
+  console.log('foo');
+  const update = React.update();
+
+  const handleClick = () => {
+    countFoo++;
+    update();
   };
   return (
     <div>
-      <p>Hello 🫡</p>
-      <p style="color:red">Nano React</p>
+      FOO:{countFoo}
       <button onClick={handleClick}>Click</button>
-      <Counter baseCount={baseCount} />
+    </div>
+  );
+}
+let countBar = 1;
+function Bar() {
+  console.log('bar');
+  const update = React.update();
+  const handleClick = () => {
+    countBar++;
+    update();
+  };
+  return (
+    <div>
+      FOO:{countBar}
+      <button onClick={handleClick}>Click</button>
+    </div>
+  );
+}
+function App() {
+  return (
+    <div>
+      <Foo></Foo>
+      <Bar></Bar>
     </div>
   );
 }

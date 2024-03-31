@@ -1,4 +1,4 @@
-import { nextRootFiber, performWorkOfUnit, updateProps, workInProgress } from '../React.js';
+import { emptifyDeleteList, nextRootFiber, performWorkOfUnit, shouldDeleteNodeList, updateProps, workInProgress } from '../React.js';
 import { shouldYieldWork } from './SchdulerWork.js';
 
 
@@ -8,10 +8,9 @@ export function workLoop() {
     //将Fiber节点构造工作未完成的任务返回
     const continuationWork = performWorkOfUnit(workInProgress);
 
-    //源码中有Fiber构造可中断
-    // if (continuationWork) {
-    //   performWorkOfUnit(continuationWork)
-    // } 
+    if (continuationWork) {
+      performWorkOfUnit(continuationWork)
+    }
 
     if (!workInProgress) { //一次性挂载  统一提交
       commitRoot()
@@ -25,11 +24,19 @@ export function workLoop() {
   }
 }
 
-
+/**
+ * 提交根节点，即从根节点开始将DOM挂载到DOM Tree上
+ * 1. 删除需要删除的节点
+ * 2. 提交其他节点，更新 或 新增
+ */
 function commitRoot() {
+  //删除所需删除的节点
+  shouldDeleteNodeList.forEach(commitDelete);
+  //清空删除节点
+  emptifyDeleteList();
+  //挂载节点
   commitWork(nextRootFiber.child);
 }
-
 
 function commitWork(fiberNode) {
   if (!fiberNode) return;
@@ -50,4 +57,25 @@ function commitWork(fiberNode) {
   //递归执行初始化/更新
   commitWork(fiberNode.child);
   commitWork(fiberNode.sibling);
+}
+
+/**
+ * 删除Fiber 对应的 DOM
+ * @param {Object} deleteFiberNode 
+ */
+function commitDelete(deleteFiberNode) {
+  let parentFiberNode = deleteFiberNode.parent;
+
+  const isFunctionComponent = typeof deleteFiberNode.type === 'function';
+  if (isFunctionComponent) { //如果是函数组件，则要删除该Fiber节点的所有子节点
+    let child = deleteFiberNode.child;
+    while (typeof child.type === 'function') { //一直向下寻找第一个不是函数组件的节点
+      child = child.child;
+    }
+    child.dom.remove()
+  } else {
+    const parentDom = parentFiberNode.dom;
+    const deleteChildDom = deleteFiberNode.dom;
+    parentDom.removeChild(deleteChildDom)
+  }
 }
