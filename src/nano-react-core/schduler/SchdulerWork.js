@@ -13,10 +13,10 @@ function performWorkUntilDeadline() {
     try {
       const hasMore = schduledWork(); //尝试去执行
       if (hasMore) {
-        console.log("工作的多个任务未执行完，接着执行")
+        // console.log("工作的多个任务未执行完，接着执行")
         port2.postMessage(null);
       } else {
-        console.log("工作执行完毕")
+        // console.log("工作执行完毕")
         isRunning = false;
       }
     } catch (error) {

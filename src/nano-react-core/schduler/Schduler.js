@@ -28,6 +28,7 @@ export function workLoop() {
  * 提交根节点，即从根节点开始将DOM挂载到DOM Tree上
  * 1. 删除需要删除的节点
  * 2. 提交其他节点，更新 或 新增
+ * 3. 执行副作用——> 即执行useEffect，实际上是Fiber节点中的effectHooks对象中的callback，并且在执行前需要先执行effectHooks对象的cleanup
  */
 function commitRoot() {
   //删除所需删除的节点
@@ -36,6 +37,8 @@ function commitRoot() {
   emptifyDeleteList();
   //挂载节点
   commitWork(nextRootFiber.child);
+  //执行副作用
+  commitEffects(nextRootFiber);
 }
 
 function commitWork(fiberNode) {
@@ -78,4 +81,58 @@ function commitDelete(deleteFiberNode) {
     const deleteChildDom = deleteFiberNode.dom;
     parentDom.removeChild(deleteChildDom)
   }
+}
+
+/**
+ * 执行所有副作用
+ * @param {Object} fiberRoot 
+ */
+function commitEffects(fiberRoot) {
+  function recursiveEffects(fiberNode) { //递归寻找effectHook，并调用
+    if (!fiberNode) return;
+    const oldFiberNode = fiberNode.alternate;
+    const isInit = !oldFiberNode;
+    if (isInit) { //初始化阶段，执行所有effectHook
+      fiberNode.effectHooks?.forEach((effect) => {
+        if (effect.deps.length) {
+          effect.cleanup = effect.callback();
+        }
+      })
+    } else { //更新阶段 对比deps
+      for (let index = 0; index < fiberNode.effectHooks?.length || 0; index++) {
+        const effect = fiberNode.effectHooks[index];
+
+        if (!effect.deps.length) break;
+
+        const oldEffect = oldFiberNode?.effectHooks[index];
+
+        const needUpdate = oldEffect?.deps.some((oldDep, i) => {
+          return !Object.is(oldDep, effect.deps[i]);
+        })
+        if (needUpdate) {
+          effect.cleanup = effect.callback();
+        }
+      }
+    }
+
+    recursiveEffects(fiberNode.child);
+    recursiveEffects(fiberNode.sibling);
+  }
+
+
+  function recursiveCleanup(fiberNode) { //递归，调用其所有节点的老节点的cleanup
+    const oldFiber = fiberNode?.alternate;
+    if (!oldFiber) return;
+    const oldEffects = oldFiber.effectHooks;
+    oldEffects?.forEach((effect) => {
+      if (effect.cleanup) effect.cleanup();
+    })
+
+    recursiveCleanup(fiberNode.child);
+    recursiveCleanup(fiberNode.sibling);
+  }
+
+  //先调用老Fiber的Effect的 cleanup 再调用新Fiber 的 effect
+  recursiveCleanup(fiberRoot);
+  recursiveEffects(fiberRoot);
 }

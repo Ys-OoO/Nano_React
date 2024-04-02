@@ -170,6 +170,9 @@ function isNeedUpdate(oldFiber, curFiber) {
 
 //更新和初始化函数组件
 function updateFunctionComponent(fiberNode) {
+  hooks = [];
+  hookIndex = 0;
+  effectHooks = [];
   functionComponentRoot = fiberNode; //保存当前处理的节点
   //调用函数组件，传递props
   const children = [fiberNode.type(fiberNode.props)]
@@ -289,7 +292,7 @@ function render(vDom, domContainer) {
 }
 
 /**
- * 更新时触发的逻辑
+ * 更新时触发的逻辑,目前没啥用，被useState取代了
  * @param {*} vDom 
  * @param {*} domContainer 
  */
@@ -311,11 +314,88 @@ export function emptifyDeleteList() {
   shouldDeleteNodeList = [];
 }
 
+
+let hooks; // 一个函数组件中存在多个useState(),用于保存这些useState对应的Hook对象
+let hookIndex;// 维护useState的顺序，以便可以对应获取状态。这也是为什么不能将useState等放入条件语句中的原因
+/**
+ * useState的原理：
+ * 在每次函数组件执行时，都会执行一次useState函数
+ * 初始化时，会为当前函数组件的Fiber节点挂载一个hooks队列，包含Hook对象，存储了状态以及一个更新队列， 初次渲染时会使用初始值进行渲染
+ * 更新（调用setState）时：
+ *    由于之前存储了一个状态memoizedState以及更新队列queue，先判断这次更新有没有必要执行（值是否变化）
+ *    将需要执行的setState统一放入queue中等待统一执行
+ *    触发更新，也就是通知调度器进行Fiber构造和DOM更新
+ *    当再次执行到该函数组件时，内部的useState会重新执行，此时会批量执行queue中的所有更新函数，将memoizedState更新
+ *    当DOM挂载时会使用到更新后的值
+ * setState 中需要使用上一次渲染后的组件状态，这些状态挂载到Hook对象上，Hook对象在Fiber节点上，Fiber节点在useState函数中是innerFuncFiber，与setState函数形参闭包
+ * @param {any} initialValue 初始值
+ * @returns 
+ */
+export function useState(initialValue) {
+  let innerFuncFiber = functionComponentRoot;
+  const oldHook = innerFuncFiber.alternate?.hooks[hookIndex]; //获取之前的Hook,由于每次执行函数组件时，useState的顺序是相同的，因此只需要维护一个索引就可以正确获取了
+
+  //创建新的Hook对象，如果时初始化时，则设置为initialValue，更新时设置为取出的oldHook中的状态
+  const Hook = {
+    memoizedState: oldHook ? oldHook.memoizedState : initialValue,
+    queue: oldHook ? oldHook.queue : []
+  }
+
+  //调用Hook.queue 中的 action
+  Hook.queue.forEach(action => {
+    Hook.memoizedState = action(Hook.memoizedState);
+  })
+  //清空
+  Hook.queue = [];
+
+  hookIndex++; //索引更新
+  hooks.push(Hook); //将Hook对象加入hooks列表
+
+  innerFuncFiber.hooks = hooks; //将hooks列表存入当前的函数组件的Fiber上，以便下次获取
+
+  function setState(action) {
+
+    const curAction = typeof action === 'function' ? action : () => action;
+    //预检查是否需要重新计算Fiber
+    let nextState = curAction(Hook.memoizedState);
+    if (nextState === Hook.memoizedState) {
+      return
+    }
+
+    // Hook.memoizedState = action(Hook.memoizedState); //调用回调更新状态
+    Hook.queue.push(curAction); // 批量更新，将任务存储在队列。批量更新的优化场景：连续多次调用setState，仅执行一次渲染
+    currentRootFiber = nextRootFiber;
+    nextRootFiber = {
+      ...innerFuncFiber,
+      alternate: innerFuncFiber
+    }
+
+    workInProgress = nextRootFiber;
+    requestWork(workLoop);
+  }
+
+  return [Hook.memoizedState, setState];
+}
+
+
+let effectHooks;
+export function useEffect(callback, deps) {
+  //初始化effectHook对象，保存回调以及依赖项
+  const effectHook = {
+    callback,
+    deps,
+    cleanup: undefined
+  }
+  effectHooks.push(effectHook);
+  // cleanupEffects.push(callback);  //将effectHook对象挂载到当前函数组件的Fiber节点上,等待后续CommitRoot时执行
+  functionComponentRoot.effectHooks = effectHooks;
+}
+
+
 const React = {
-  update,
   createElement,
   createTextNode,
-  render
+  render,
 }
 
 export default React 

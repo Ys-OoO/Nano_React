@@ -1,41 +1,42 @@
-import React from './nano-react-core/React.js';
-
-let countFoo = 1;
+import React, { useEffect, useState } from './nano-react-core/React.js';
 function Foo() {
-  console.log('foo');
-  const update = React.update();
+  const [count, setCount] = useState(10);
+  const [str, setStr] = useState('x');
+
+  useEffect(() => {
+    console.log('Foo str updating', str);
+
+    return () => {
+      console.log('cleanup effects');
+    };
+  }, [str]);
+
+  useEffect(() => {
+    console.log('Foo first Rendering');
+    return () => {
+      console.log('无依赖不会被执行');
+    };
+  }, []);
 
   const handleClick = () => {
-    countFoo++;
-    update();
+    setCount(11);
+    setStr((prev) => prev + 'x');
   };
   return (
     <div>
-      FOO:{countFoo}
+      FOO:{count}
+      <br />
+      Str:{str}
+      <br />
       <button onClick={handleClick}>Click</button>
     </div>
   );
 }
-let countBar = 1;
-function Bar() {
-  console.log('bar');
-  const update = React.update();
-  const handleClick = () => {
-    countBar++;
-    update();
-  };
-  return (
-    <div>
-      FOO:{countBar}
-      <button onClick={handleClick}>Click</button>
-    </div>
-  );
-}
+
 function App() {
   return (
     <div>
       <Foo></Foo>
-      <Bar></Bar>
     </div>
   );
 }
