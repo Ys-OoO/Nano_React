@@ -94,9 +94,9 @@ function commitEffects(fiberRoot) {
     const isInit = !oldFiberNode;
     if (isInit) { //初始化阶段，执行所有effectHook
       fiberNode.effectHooks?.forEach((effect) => {
-        if (effect.deps.length) {
+        // if (effect.deps.length) {
           effect.cleanup = effect.callback();
-        }
+        // }
       })
     } else { //更新阶段 对比deps
       for (let index = 0; index < fiberNode.effectHooks?.length || 0; index++) {

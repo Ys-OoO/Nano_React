@@ -49,6 +49,72 @@ function createElement(type, props, ...children) {
     }
   }
 }
+function diff(newElements, oldFiberNode){
+  // 拿到这个父亲节点下面所有旧的节点
+  const oldElements = []
+  let tmp = oldFiberNode
+  while(tmp){
+    if(tmp.children){
+      tmp = tmp.sibling
+      continue
+    }
+    oldElements.push(tmp)
+    tmp = tmp.sibling
+  }
+  let breakCount = 0
+  for(let i =0;i<Math.min(newElements.length, oldElements.length);i++){
+    if(newElements[i].type !== oldElements[i].type ||newElements[i].key !== oldElements[i].key){
+      break
+    }
+    newElements[i].effectTag = 'update'
+    breakCount++
+  }
+  if(breakCount < oldElements.length && breakCount < newElements.length) {
+    let oldRest = oldElements.slice(breakCount, oldElements.length)
+    // 说明提前被结束了
+    const restOldHashKey = new Set(oldRest.map((item)=> item.key))
+    for(let i = breakCount; i< newElements.length;i++ ){
+      if(restOldHashKey.has(newElements[i].key)){
+        newElements[i].effectTag = 'update'
+        restOldHashKey.delete(newElements[i].key)
+      }else{
+        // 给不能复用旧节点的 新节点 打 placement标签
+        newElements[i].effectTag = 'placement'
+      }
+    }
+    // 删除 剩下的 olderFiberNode
+    while(restOldHashKey.size){
+      for(let i=breakCount;i<oldElements.length;i++){
+        if(restOldHashKey.has(oldElements[i].key)){
+          shouldDeleteNodeList.push(oldElements[i])
+          restOldHashKey.delete(oldElements[i].key)
+        }
+      }
+      
+    }
+  }
+  else if(breakCount < oldElements.length && breakCount >= newElements.length){
+    // 说明新的节点 全部可以使用 旧的节点 只需要删掉不能复用的旧的节点
+    for(let i=breakCount;i<oldElements.length;i++){
+      shouldDeleteNodeList.push(oldElements[i])
+    }
+  }
+  else if(breakCount >= oldElements.length && breakCount < newElements.length){
+    // 说明旧节点全部可以复用 但是有新的节点需要加
+    for(let i = breakCount ;i < newElements.length;i++){
+      newElements[i].effectTag = 'placement'
+    }
+  }
+  else{
+    // 不可能出现这个情况
+    // throw new Error(' unkonw Error ')
+  }
+  return newElements
+}
+
+function flattenChildren(children){
+  return children.flat(Infinity)
+}
 
 /**
  *  Fiber树结构如下，每个节点连接其第一个子节点，连接第一个兄弟节点，连接他的父节点
@@ -70,6 +136,11 @@ function reconcileChildren(fiberNode, children) {
   let prevFiberNode = null;
   let parentFiberNode = fiberNode;
   let firstFlag = false; // 用于处理第一个孩子节点是false的情况，如果第一个孩子节点是false，那么他的兄弟节点应充当第一个孩子节点
+  children = flattenChildren(children)
+  
+  if(oldFiberChild) {
+    children = diff(children, oldFiberChild)
+  }
   children.forEach((child, index) => {
     let curFiberNode;
     //判断是否需要更新
@@ -126,10 +197,10 @@ function reconcileChildren(fiberNode, children) {
   })
 
   //删除多余老节点
-  while (oldFiberChild) {
-    shouldDeleteNodeList.push(oldFiberChild);
-    oldFiberChild = oldFiberChild.sibling;
-  }
+  // while (oldFiberChild) {
+  //   shouldDeleteNodeList.push(oldFiberChild);
+  //   oldFiberChild = oldFiberChild.sibling;
+  // }
 
   //寻找下一个节点，子节点/兄弟节点/叔叔节点
   if (parentFiberNode.child) {
